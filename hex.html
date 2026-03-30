@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hex Pathfinding Visualizer</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0d0f14; --surface: #13161e; --panel: #1a1e2a; --border: #252a38;
+    --text: #cdd6f4; --muted: #6c7086;
+    --start: #a6e3a1; --end: #f38ba8; --wall: #2a2d3e;
+    --visited: #1a3560; --path: #cba6f7; --empty: #1a1e2a; --accent: #89b4fa;
+  }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    min-height: 100vh; display: flex; flex-direction: column;
+    align-items: center; padding: 20px 12px; gap: 16px; user-select: none;
+  }
+  header { text-align: center; }
+  header h1 { font-size: 20px; font-weight: 600; color: var(--text); letter-spacing: -0.2px; }
+  header p { font-size: 12px; color: var(--muted); margin-top: 3px; font-family: monospace; }
+
+  .toolbar {
+    display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+    justify-content: center; background: var(--surface);
+    border: 1px solid var(--border); border-radius: 10px;
+    padding: 10px 14px; width: 100%; max-width: 860px;
+  }
+  .tg { display: flex; align-items: center; gap: 6px; }
+  .tg label { font-size: 10px; font-family: monospace; color: var(--muted); text-transform: uppercase; letter-spacing: .8px; }
+  .div { width: 1px; height: 24px; background: var(--border); }
+  select, button {
+    background: var(--panel); color: var(--text); border: 1px solid var(--border);
+    border-radius: 5px; padding: 5px 10px; font-size: 12px; cursor: pointer;
+    transition: border-color .15s; font-family: inherit; white-space: nowrap;
+  }
+  select:hover, button:hover { border-color: var(--accent); }
+  select:focus { outline: none; border-color: var(--accent); }
+  button.primary { background: var(--accent); color: #0d0f14; font-weight: 600; border-color: var(--accent); }
+  button.primary:hover { background: #a5c8fd; }
+  button.primary:disabled { background: var(--border); color: var(--muted); border-color: var(--border); cursor: not-allowed; }
+  button.danger { color: var(--end); border-color: #6b2d3a; }
+  button.danger:hover { border-color: var(--end); background: #2a1318; }
+  .mb { display: flex; align-items: center; gap: 5px; font-size: 12px; }
+  .mb .dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+  .mb.active { border-color: var(--accent); background: #1a2640; color: var(--accent); }
+  input[type=range] {
+    -webkit-appearance: none; width: 70px; height: 4px;
+    background: var(--border); border-radius: 2px; border: none; outline: none; cursor: pointer;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 12px; height: 12px;
+    border-radius: 50%; background: var(--accent); cursor: pointer;
+  }
+  .sv { font-family: monospace; font-size: 11px; color: var(--accent); min-width: 24px; }
+
+  .main { display: flex; gap: 14px; align-items: flex-start; width: 100%; max-width: 860px; justify-content: center; }
+
+  #canvas-wrap {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; overflow: hidden; cursor: crosshair; flex-shrink: 0;
+  }
+  canvas { display: block; }
+
+  .sp {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px; display: flex;
+    flex-direction: column; gap: 10px; min-width: 170px; flex-shrink: 0;
+  }
+  .st { font-family: monospace; font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .8px; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+  .stat .val { font-size: 20px; font-weight: 600; font-family: monospace; line-height: 1; }
+  .stat .lbl { font-size: 10px; color: var(--muted); font-family: monospace; margin-top: 2px; }
+  .ac { color: var(--accent); } .pc { color: var(--path); } .ec { color: var(--end); }
+  .leg { margin-top: 2px; display: flex; flex-direction: column; gap: 5px; border-top: 1px solid var(--border); padding-top: 8px; }
+  .li { display: flex; align-items: center; gap: 7px; font-size: 11px; color: var(--muted); }
+  .ld { width: 11px; height: 11px; border-radius: 2px; flex-shrink: 0; }
+  .sb { font-family: monospace; font-size: 11px; color: var(--muted); text-align: center; min-height: 16px; }
+  .sb.run { color: var(--accent); } .sb.ok { color: var(--start); } .sb.fail { color: var(--end); }
+
+  .hint {
+    font-size: 11px; color: var(--muted); font-family: monospace;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 6px; padding: 8px 12px; text-align: center;
+    max-width: 860px; width: 100%;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>⬡ Hex Grid Pathfinding Visualizer</h1>
+  <p>// BFS · Dijkstra · A* on hexagonal topology · flat-top offset grid</p>
+</header>
+
+<div class="toolbar">
+  <div class="tg">
+    <label>Algorithm</label>
+    <select id="algoS">
+      <option value="astar">A* (Hex heuristic)</option>
+      <option value="dijkstra">Dijkstra</option>
+      <option value="bfs">BFS</option>
+    </select>
+  </div>
+  <div class="div"></div>
+  <div class="tg">
+    <label>Draw</label>
+    <button class="mb active" id="bW" onclick="setMode('wall')"><span class="dot" style="background:#2a2d3e"></span>Wall</button>
+    <button class="mb" id="bS" onclick="setMode('start')"><span class="dot" style="background:#a6e3a1"></span>Start</button>
+    <button class="mb" id="bE" onclick="setMode('end')"><span class="dot" style="background:#f38ba8"></span>End</button>
+  </div>
+  <div class="div"></div>
+  <div class="tg">
+    <label>Speed</label>
+    <input type="range" id="spd" min="1" max="5" value="3" step="1">
+    <span class="sv" id="spv">3x</span>
+  </div>
+  <div class="div"></div>
+  <div class="tg">
+    <button class="primary" id="bRun" onclick="runAlgo()">&#9654; Run</button>
+    <button onclick="genMaze()">&#9632;&#9632; Maze</button>
+    <button class="danger" onclick="clearAll()">&#10005; Clear</button>
+    <button onclick="clearPath()">&#8635; Path</button>
+  </div>
+</div>
+
+<div class="main">
+  <div id="canvas-wrap">
+    <canvas id="cvs"></canvas>
+  </div>
+
+  <div class="sp">
+    <div class="st">Stats</div>
+    <div class="stat"><span class="val ac" id="sv">—</span><span class="lbl">cells visited</span></div>
+    <div class="stat"><span class="val pc" id="sp2">—</span><span class="lbl">path length</span></div>
+    <div class="stat"><span class="val ec" id="st2">—</span><span class="lbl">ms elapsed</span></div>
+    <div class="leg">
+      <div class="li"><span class="ld" style="background:#a6e3a1"></span>Start</div>
+      <div class="li"><span class="ld" style="background:#f38ba8"></span>End</div>
+      <div class="li"><span class="ld" style="background:#2a2d3e"></span>Wall</div>
+      <div class="li"><span class="ld" style="background:#1a3560"></span>Visited</div>
+      <div class="li"><span class="ld" style="background:#cba6f7"></span>Path</div>
+    </div>
+    <div style="border-top:1px solid var(--border);padding-top:8px;">
+      <div style="font-size:10px;color:var(--muted);font-family:monospace;margin-bottom:6px;text-transform:uppercase;letter-spacing:.8px;">Hex coords</div>
+      <div id="coordDisplay" style="font-family:monospace;font-size:11px;color:var(--accent);">hover a hex</div>
+    </div>
+  </div>
+</div>
+
+<div class="sb" id="sb">Click hexes to draw walls · right-click to erase</div>
+
+<div class="hint">
+  Hex grids use 6 neighbours per cell. A* uses the hex distance formula: h = (|Δq| + |Δr| + |Δs|) / 2
+</div>
+
+<script>
+// ── Hex grid config ────────────────────────────────────────────────────────────
+const COLS = 24, ROWS = 15;
+const HEX_SIZE = 20; // flat-top, radius to corner
+
+// Flat-top hex dimensions
+const HW = HEX_SIZE;                       // half-width = size
+const HH = HEX_SIZE * Math.sqrt(3) / 2;   // half-height
+const COL_STEP = HW * 1.5;
+const ROW_STEP = HH * 2;
+const PAD = 4;
+
+const CVS_W = Math.ceil(COL_STEP * COLS + HW * 0.5 + PAD * 2);
+const CVS_H = Math.ceil(ROW_STEP * ROWS + HH + PAD * 2);
+
+const cvs = document.getElementById('cvs');
+const ctx = cvs.getContext('2d');
+cvs.width = CVS_W; cvs.height = CVS_H;
+
+// ── Colours ───────────────────────────────────────────────────────────────────
+const COL = {
+  empty:   '#1a1e2a',
+  wall:    '#2a2d3e',
+  start:   '#a6e3a1',
+  end:     '#f38ba8',
+  visited: '#1a3560',
+  path:    '#cba6f7',
+  stroke:  '#252a38',
+  text:    '#cdd6f4',
+  accent:  '#89b4fa',
+};
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let hexes = [];          // hexes[row][col] = { q, r, wall, state, el:null }
+let startHex = null, endHex = null;
+let mode = 'wall', isDown = false, running = false, animTimer = null;
+const smap = { 1:80, 2:40, 3:18, 4:6, 5:1 };
+
+// ── Flat-top hex centre pixel ─────────────────────────────────────────────────
+function hexCenter(col, row) {
+  const x = PAD + col * COL_STEP + HW;
+  const y = PAD + row * ROW_STEP + HH + (col % 2 === 1 ? HH : 0);
+  return { x, y };
+}
+
+// ── Draw one hex ──────────────────────────────────────────────────────────────
+function hexPath(cx, cy, r) {
+  ctx.beginPath();
+  for (let i = 0; i < 6; i++) {
+    const angle = (Math.PI / 180) * (60 * i);  // flat-top: 0° points right
+    const px = cx + r * Math.cos(angle);
+    const py = cy + r * Math.sin(angle);
+    i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+  }
+  ctx.closePath();
+}
+
+function drawHex(hex, animated) {
+  const { x, y } = hexCenter(hex.col, hex.row);
+  const fillColor =
+    hex === startHex ? COL.start :
+    hex === endHex   ? COL.end :
+    hex.wall         ? COL.wall :
+    hex.state === 'path'    ? COL.path :
+    hex.state === 'visited' ? COL.visited :
+    COL.empty;
+
+  hexPath(x, y, HEX_SIZE - 1.5);
+  ctx.fillStyle = fillColor;
+  ctx.fill();
+  hexPath(x, y, HEX_SIZE - 1);
+  ctx.strokeStyle = COL.stroke;
+  ctx.lineWidth = 0.8;
+  ctx.stroke();
+
+  // Label for start/end
+  if (hex === startHex || hex === endHex) {
+    ctx.fillStyle = '#0d0f14';
+    ctx.font = 'bold 9px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(hex === startHex ? 'S' : 'E', x, y);
+  }
+}
+
+function redrawAll() {
+  ctx.clearRect(0, 0, CVS_W, CVS_H);
+  for (let r = 0; r < ROWS; r++)
+    for (let c = 0; c < COLS; c++)
+      drawHex(hexes[r][c]);
+}
+
+// ── Flat-top offset → axial coords ────────────────────────────────────────────
+function offsetToAxial(col, row) {
+  const q = col;
+  const r = row - (col - (col & 1)) / 2;
+  return { q, r, s: -q - r };
+}
+
+// ── 6 neighbours in flat-top offset ──────────────────────────────────────────
+function neighbours(col, row) {
+  const ns = [];
+  const dirs = col % 2 === 0
+    ? [[-1,-1],[-1,0],[0,1],[1,0],[1,-1],[0,-1]]
+    : [[-1,0],[-1,1],[0,1],[1,1],[1,0],[0,-1]];
+  for (const [dc, dr] of dirs) {
+    const nc = col + dc, nr = row + dr;
+    if (nc >= 0 && nc < COLS && nr >= 0 && nr < ROWS && !hexes[nr][nc].wall)
+      ns.push(hexes[nr][nc]);
+  }
+  return ns;
+}
+
+// ── Hex distance heuristic (axial) ────────────────────────────────────────────
+function hexDist(a, b) {
+  const aq = offsetToAxial(a.col, a.row);
+  const bq = offsetToAxial(b.col, b.row);
+  return (Math.abs(aq.q - bq.q) + Math.abs(aq.r - bq.r) + Math.abs(aq.s - bq.s)) / 2;
+}
+
+// ── Init grid ─────────────────────────────────────────────────────────────────
+function initGrid() {
+  hexes = [];
+  for (let r = 0; r < ROWS; r++) {
+    hexes[r] = [];
+    for (let c = 0; c < COLS; c++) {
+      hexes[r][c] = { col: c, row: r, wall: false, state: 'empty' };
+    }
+  }
+  startHex = hexes[2][1];
+  endHex   = hexes[ROWS - 3][COLS - 2];
+  redrawAll();
+}
+
+// ── Pixel → hex ───────────────────────────────────────────────────────────────
+function pixelToHex(px, py) {
+  let best = null, bestDist = Infinity;
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const { x, y } = hexCenter(c, r);
+      const d = Math.hypot(px - x, py - y);
+      if (d < bestDist) { bestDist = d; best = hexes[r][c]; }
+    }
+  }
+  return bestDist <= HEX_SIZE ? best : null;
+}
+
+// ── Input handling ────────────────────────────────────────────────────────────
+cvs.addEventListener('mousedown', e => {
+  isDown = true;
+  const rect = cvs.getBoundingClientRect();
+  handleClick(e.clientX - rect.left, e.clientY - rect.top);
+  e.preventDefault();
+});
+cvs.addEventListener('mousemove', e => {
+  const rect = cvs.getBoundingClientRect();
+  const hex = pixelToHex(e.clientX - rect.left, e.clientY - rect.top);
+  if (hex) {
+    const ax = offsetToAxial(hex.col, hex.row);
+    document.getElementById('coordDisplay').textContent = `q:${ax.q} r:${ax.r} s:${ax.s}`;
+  }
+  if (isDown) handleClick(e.clientX - rect.left, e.clientY - rect.top);
+});
+cvs.addEventListener('mouseup', () => { isDown = false; });
+cvs.addEventListener('contextmenu', e => {
+  e.preventDefault();
+  if (running) return;
+  const rect = cvs.getBoundingClientRect();
+  const hex = pixelToHex(e.clientX - rect.left, e.clientY - rect.top);
+  if (hex && hex !== startHex && hex !== endHex) {
+    hex.wall = false; hex.state = 'empty'; drawHex(hex);
+  }
+});
+document.addEventListener('mouseup', () => { isDown = false; });
+
+function handleClick(px, py) {
+  if (running) return;
+  const hex = pixelToHex(px, py);
+  if (!hex) return;
+  if (mode === 'wall') {
+    if (hex === startHex || hex === endHex) return;
+    hex.wall = !hex.wall; hex.state = 'empty'; drawHex(hex);
+  } else if (mode === 'start') {
+    const old = startHex;
+    startHex = hex; hex.wall = false; hex.state = 'empty';
+    if (old) drawHex(old); drawHex(hex);
+  } else {
+    const old = endHex;
+    endHex = hex; hex.wall = false; hex.state = 'empty';
+    if (old) drawHex(old); drawHex(hex);
+  }
+}
+
+function setMode(m) {
+  mode = m;
+  document.querySelectorAll('.mb').forEach(b => b.classList.remove('active'));
+  document.getElementById('b' + m[0].toUpperCase() + m.slice(1)).classList.add('active');
+}
+
+document.getElementById('spd').addEventListener('input', function() {
+  document.getElementById('spv').textContent = this.value + 'x';
+});
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function clearPath() {
+  if (running) return;
+  for (let r = 0; r < ROWS; r++)
+    for (let c = 0; c < COLS; c++)
+      if (hexes[r][c].state !== 'empty') { hexes[r][c].state = 'empty'; }
+  redrawAll();
+  setSb('', ''); setStats('—','—','—');
+}
+
+function clearAll() {
+  if (running) { running = false; if (animTimer) { clearTimeout(animTimer); animTimer = null; } }
+  for (let r = 0; r < ROWS; r++)
+    for (let c = 0; c < COLS; c++) { hexes[r][c].wall = false; hexes[r][c].state = 'empty'; }
+  startHex = hexes[2][1]; endHex = hexes[ROWS-3][COLS-2];
+  redrawAll(); setSb('',''); setStats('—','—','—');
+  document.getElementById('bRun').disabled = false;
+}
+
+function genMaze() {
+  if (running) return; clearPath();
+  for (let r = 0; r < ROWS; r++)
+    for (let c = 0; c < COLS; c++) {
+      const h = hexes[r][c];
+      if (h === startHex || h === endHex) continue;
+      h.wall = Math.random() < 0.28;
+    }
+  redrawAll();
+}
+
+function setSb(m, c) {
+  const el = document.getElementById('sb');
+  el.textContent = m; el.className = 'sb' + (c ? ' ' + c : '');
+}
+function setStats(v, p, t) {
+  document.getElementById('sv').textContent = v;
+  document.getElementById('sp2').textContent = p;
+  document.getElementById('st2').textContent = t;
+}
+
+function key(h) { return h.row * COLS + h.col; }
+
+function reconstruct(cf, s, e) {
+  const path = []; let n = e;
+  while (n !== s) { path.push(n); n = cf.get(n); if (!n) return []; }
+  path.push(s); return path.reverse();
+}
+
+// ── Algorithms ────────────────────────────────────────────────────────────────
+function doBFS() {
+  const s = startHex, e = endHex;
+  const q = [s], vis = new Set([key(s)]), cf = new Map([[s, null]]), vo = [];
+  while (q.length) {
+    const h = q.shift(); vo.push(h);
+    if (h === e) break;
+    for (const nb of neighbours(h.col, h.row)) {
+      const k = key(nb);
+      if (!vis.has(k)) { vis.add(k); cf.set(nb, h); q.push(nb); }
+    }
+  }
+  return { vo, path: cf.has(e) ? reconstruct(cf, s, e) : [] };
+}
+
+function doDijkstra() {
+  const s = startHex, e = endHex;
+  const dist = new Map([[key(s), 0]]), cf = new Map([[s, null]]);
+  const pq = [[0, s]], vis = new Set(), vo = [];
+  while (pq.length) {
+    pq.sort((a, b) => a[0] - b[0]);
+    const [d, h] = pq.shift();
+    const k = key(h);
+    if (vis.has(k)) continue; vis.add(k); vo.push(h);
+    if (h === e) break;
+    for (const nb of neighbours(h.col, h.row)) {
+      const nk = key(nb), nd = d + 1;
+      if (nd < (dist.get(nk) ?? Infinity)) { dist.set(nk, nd); cf.set(nb, h); pq.push([nd, nb]); }
+    }
+  }
+  return { vo, path: cf.has(e) ? reconstruct(cf, s, e) : [] };
+}
+
+function doAstar() {
+  const s = startHex, e = endHex;
+  const g = new Map([[key(s), 0]]), cf = new Map([[s, null]]);
+  const open = [[hexDist(s, e), 0, s]], cl = new Set(), vo = [];
+  while (open.length) {
+    open.sort((a, b) => a[0] - b[0]);
+    const [, cost, h] = open.shift();
+    const k = key(h);
+    if (cl.has(k)) continue; cl.add(k); vo.push(h);
+    if (h === e) break;
+    for (const nb of neighbours(h.col, h.row)) {
+      const nk = key(nb), ng = cost + 1;
+      if (ng < (g.get(nk) ?? Infinity)) {
+        g.set(nk, ng); cf.set(nb, h);
+        open.push([ng + hexDist(nb, e), ng, nb]);
+      }
+    }
+  }
+  return { vo, path: cf.has(e) ? reconstruct(cf, s, e) : [] };
+}
+
+// ── Animation ─────────────────────────────────────────────────────────────────
+function runAlgo() {
+  if (running) return;
+  if (!startHex || !endHex) { setSb('Place start and end first.', ''); return; }
+  clearPath(); running = true;
+  document.getElementById('bRun').disabled = true;
+  setSb('Running…', 'run');
+
+  const algo = document.getElementById('algoS').value;
+  const t0 = performance.now();
+  const { vo, path } = algo === 'bfs' ? doBFS() : algo === 'dijkstra' ? doDijkstra() : doAstar();
+  const elapsed = (performance.now() - t0).toFixed(2);
+
+  const delay = smap[+document.getElementById('spd').value];
+  let i = 0;
+
+  function stepV() {
+    if (i >= vo.length) { animPath(path, elapsed, vo.length); return; }
+    const h = vo[i];
+    if (h !== startHex && h !== endHex) { h.state = 'visited'; drawHex(h); }
+    i++; setStats(i, '…', elapsed);
+    animTimer = setTimeout(stepV, delay);
+  }
+  stepV();
+}
+
+function animPath(path, elapsed, visited) {
+  if (!path.length) {
+    setSb('No path found.', 'fail'); setStats(visited, '✗', elapsed);
+    running = false; document.getElementById('bRun').disabled = false; return;
+  }
+  const delay = smap[+document.getElementById('spd').value] * 1.5;
+  let j = 0;
+  function stepP() {
+    if (j >= path.length) {
+      setSb(`Path found · ${path.length} steps · ${visited} cells visited`, 'ok');
+      setStats(visited, path.length, elapsed);
+      running = false; document.getElementById('bRun').disabled = false; return;
+    }
+    const h = path[j];
+    if (h !== startHex && h !== endHex) { h.state = 'path'; drawHex(h); }
+    j++; animTimer = setTimeout(stepP, delay);
+  }
+  stepP();
+}
+
+// ── Boot ──────────────────────────────────────────────────────────────────────
+initGrid();
+</script>
+</body>
+</html>
