@@ -2,7 +2,7 @@
 
 An interactive browser-based tool that animates **BFS**, **Dijkstra**, and **A\*** on both square and hexagonal grids. Draw walls, place start/end points, and watch the algorithms explore in real time.
 
-**[▶ Live Demo (Square Grid)](https://sidharthkris.github.io/pathfinding-visualizer/index.html)** · **[⬡ Live Demo (Hex Grid)](https://sidharthkris.github.io/pathfinding-visualizer/hex.html)**
+**[▶ Live Demo ](https://sidharthkris.github.io/pathfinding-visualizer/index.html)**
 
 ![Comparison](pathfinding_comparison.png)
 
@@ -157,8 +157,7 @@ python visualizer.py --algo astar
 
 ```
 pathfinding-visualizer/
-├── index.html                  # Square grid GUI
-├── hex.html                    # Hex grid GUI
+├── index.html                  # Square and Hex grid GUI
 ├── visualizer.py               # CLI batch tool (PNG output)
 ├── pathfinding_comparison.png  # Sample output image
 ├── requirements.txt
